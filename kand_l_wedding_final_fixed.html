@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>K&L Wedding — Planner</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+
+  <style>
+    :root{--accent:#52796f;--accent-strong:#354f52;--bg:#f8f9fa;--card:#fff;--muted:#6b6b6b;--radius:8px;--gap:0.6rem}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial;background:var(--bg);color:#222}
+    header{background:var(--card);border-bottom:1px solid #e6e6e6;padding:0.75rem 1rem;display:flex;align-items:center;justify-content:space-between}
+    header h1{margin:0;font-size:1.15rem;color:var(--accent-strong)}
+    main{display:flex;min-height:calc(100vh - 56px)}
+    nav.sidebar{width:220px;background:var(--card);border-right:1px solid #e8e8e8;padding:1rem}
+    nav.sidebar .brand{font-weight:700;color:var(--accent);margin-bottom:0.6rem}
+    nav.sidebar button.tab{display:block;width:100%;text-align:left;padding:0.5rem 0.6rem;border-radius:6px;border:none;background:none;color:#333;font-weight:600;cursor:pointer;margin-bottom:0.3rem}
+    nav.sidebar button.tab.active{background:var(--accent);color:#fff}
+    section.content{flex:1;padding:1rem}
+    .controls{display:flex;gap:0.5rem;align-items:center}
+    .controls button,.controls select{padding:0.4rem 0.7rem;border-radius:6px;border:1px solid #d6d6d6;background:var(--card);cursor:pointer}
+    .controls .primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+    form.add-task{display:grid;grid-template-columns:110px 90px 1fr 160px 140px 80px;gap:var(--gap);align-items:end;background:var(--card);padding:0.6rem;border-radius:var(--radius);border:1px solid #e6e6e6}
+    form.add-task input,form.add-task select{padding:0.45rem;border:1px solid #dcdcdc;border-radius:6px;font-size:0.9rem}
+    form.add-task button{padding:0.5rem;border-radius:6px;border:none;background:var(--accent);color:#fff;font-weight:600}
+    .timeline-container{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:0.8rem}
+    .timeline-column{background:var(--card);border:1px solid #e8e8e8;border-radius:8px;padding:0.6rem;min-height:120px}
+    .timeline-column h3{margin:0 0 0.5rem 0;color:var(--accent-strong);font-size:1rem}
+    .timeline-list{list-style:none;padding:0;margin:0}
+    .timeline-item{display:flex;justify-content:space-between;align-items:center;padding:0.45rem;border-radius:6px;border-left:4px solid var(--accent);margin-bottom:0.45rem;background:linear-gradient(0deg,#fff,#fcfcfc);cursor:grab}
+    .timeline-item .left{display:flex;gap:0.6rem;align-items:center}
+    .timeline-item .time{font-weight:600;font-size:0.92rem;color:var(--accent-strong);min-width:78px}
+    .timeline-item .meta{display:flex;flex-direction:column}
+    .timeline-item .meta .title{font-size:0.92rem}
+    .timeline-item .meta .assigned{font-size:0.82rem;color:var(--muted)}
+    .people-filter{background:var(--card);padding:0.5rem;border-radius:8px;border:1px solid #e8e8e8;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap}
+    .people-filter label{font-size:0.85rem;margin-right:0.4rem}
+    .swimlane{background:var(--card);border:1px solid #e8e8e8;border-radius:8px;padding:0.5rem;overflow:auto}
+    .swimlane-header{display:flex;gap:0.5rem;border-bottom:1px solid #eee;padding-bottom:0.4rem;margin-bottom:0.6rem}
+    .swimlane-row{display:flex;align-items:flex-start;margin-bottom:0.5rem}
+    .swimlane-row .timecell{width:120px;font-weight:600;color:var(--muted)}
+    .swimlane-row .cells{display:flex;flex:1;gap:0.5rem}
+    .swimlane-col{flex:1;min-width:160px}
+    .hidden{display:none}
+    #modal-backdrop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.35)}
+    #modal-backdrop.show{display:flex}
+    #modal-backdrop .modal{background:var(--card);padding:1rem;border-radius:8px;max-width:560px;width:100%}
+    @media (max-width:900px){form.add-task{grid-template-columns:1fr 1fr 1fr}.timeline-container{grid-template-columns:1fr}.swimlane-header{overflow:auto}.swimlane-row{flex-direction:column}.swimlane-row .timecell{width:100%}.swimlane-row .cells{width:100%;overflow:auto}}
+  </style>
+</head>
+<body>
+<header>
+  <h1>K&L Wedding — Planner</h1>
+  <div class="controls">
+    <select id="swimlane-event-filter">
+      <option value="church">Church</option>
+      <option value="poruwa">Poruwa</option>
+      <option value="reception">Reception</option>
+    </select>
+    <button id="btn-export-json">Export Project</button>
+    <button id="btn-import-json">Import Project</button>
+    <input type="file" id="import-file" accept="application/json" style="display:none">
+    <button id="btn-export-csv" class="primary">CSV</button>
+    <button id="btn-export-pdf" class="primary">PDF</button>
+  </div>
+</header>
+<main>
+  <nav class="sidebar">
+    <div class="brand">The Wedding</div>
+    <button class="tab active" data-view="by-event">By Event</button>
+    <button class="tab" data-view="compact">Compact</button>
+    <button class="tab" data-view="swimlane">Swimlane</button>
+    <div style="margin-top:0.6rem">
+      <div style="font-size:0.85rem;color:#666;margin-bottom:0.25rem">People (filter)</div>
+      <div id="people-container" class="people-filter"></div>
+    </div>
+  </nav>
+  <section class="content">
+    <form id="taskForm" class="add-task" autocomplete="off">
+      <input type="time" id="task-time" required>
+      <select id="task-duration-select">
+        <option value="">Dur</option>
+        <option value="15">15</option>
+        <option value="30">30</option>
+        <option value="45">45</option>
+        <option value="60">60</option>
+        <option value="custom">Custom</option>
+      </select>
+      <input type="number" id="task-duration-custom" min="1" placeholder="custom" style="display:none" />
+      <input type="text" id="task-title" placeholder="Task title" required>
+      <input list="assigned-list" id="task-assigned" placeholder="Assigned to">
+      <datalist id="assigned-list"></datalist>
+      <select id="task-event" required>
+        <option value="church">Church</option>
+        <option value="poruwa">Poruwa</option>
+        <option value="reception">Reception</option>
+      </select>
+      <button type="submit">Add</button>
+    </form>
+
+    <div class="timeline-topbar">
+      <div><strong id="project-name">K&amp;L Wedding — Day Plan</strong></div>
+      <div style="font-size:0.9rem;color:var(--muted)">Auto-save: <span id="autosave-status">on</span></div>
+    </div>
+
+    <div id="view-by-event">
+      <div class="timeline-container">
+        <div class="timeline-column"><h3>Church</h3><ul id="list-church" class="timeline-list"></ul></div>
+        <div class="timeline-column"><h3>Poruwa</h3><ul id="list-poruwa" class="timeline-list"></ul></div>
+        <div class="timeline-column"><h3>Reception</h3><ul id="list-reception" class="timeline-list"></ul></div>
+      </div>
+    </div>
+
+    <div id="view-compact" class="hidden"><h3>Full Day Timeline</h3><ul id="list-compact" class="timeline-list"></ul></div>
+
+    <div id="view-swimlane" class="hidden">
+      <h3>People Swimlane</h3>
+      <div class="swimlane" id="swimlane-root"></div>
+    </div>
+  </section>
+</main>
+
+<!-- Modal -->
+<div id="modal-backdrop">
+  <div class="modal" role="dialog" aria-modal="true">
+    <header style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+      <strong id="modal-title">Edit Task</strong>
+      <button id="modal-close" style="background:#f3f3f3;border:1px solid #ddd;padding:6px 8px;border-radius:6px">✕</button>
+    </header>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem">
+      <div>
+        <label>Time</label>
+        <input type="time" id="modal-time" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px">
+      </div>
+      <div>
+        <label>Duration (min)</label>
+        <input type="number" id="modal-duration" min="1" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px">
+      </div>
+      <div style="grid-column:span 2">
+        <label>Title</label>
+        <input type="text" id="modal-title-input" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px">
+      </div>
+      <div>
+        <label>Assigned</label>
+        <input list="assigned-list" id="modal-assigned" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px">
+      </div>
+      <div>
+        <label>Event</label>
+        <select id="modal-event" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px">
+          <option value="church">Church</option>
+          <option value="poruwa">Poruwa</option>
+          <option value="reception">Reception</option>
+        </select>
+      </div>
+    </div>
+    <footer style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.6rem">
+      <button id="modal-delete" style="background:#ffefef;border:1px solid #ffbcbc;color:#b00;padding:8px 10px;border-radius:6px">Delete</button>
+      <button id="modal-duplicate" style="background:#f3f3f3;border:1px solid #ddd;padding:8px 10px;border-radius:6px">Duplicate</button>
+      <button id="modal-save" style="background:var(--accent);color:#fff;padding:8px 10px;border-radius:6px;border:none">Save</button>
+    </footer>
+  </div>
+</div>
+
+<script>
+// --- App state & storage ---
+const STORAGE_KEY = 'kandl_wedding_v3';
+let appData = { timeline: { church: [], poruwa: [], reception: [] } };
+const assignedHistory = new Set();
+let currentEdit = null; // { event, id }
+
+function saveToLocal(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(appData)); }
+function loadFromLocal(){ const raw = localStorage.getItem(STORAGE_KEY); if(raw){ try{ const parsed = JSON.parse(raw); if(parsed && parsed.timeline) appData = parsed; } catch(e){ console.warn('invalid local data'); } } }
+
+function esc(s){ return (s||'').toString().replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+// --- Render helpers ---
+function getAllPeople(){ return Array.from(new Set(Object.values(appData.timeline).flat().map(t=>t.assigned).filter(Boolean))).sort((a,b)=>a.localeCompare(b)); }
+
+function renderPeopleFilter(){ const container = document.getElementById('people-container'); container.innerHTML=''; const people = getAllPeople(); if(people.length===0){ container.innerHTML='<span style="color:#999;font-size:0.9rem">No people yet</span>'; return; } people.forEach(name=>{ const label=document.createElement('label'); label.style.display='flex'; label.style.alignItems='center'; label.style.gap='6px'; const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=true; cb.dataset.name=name; cb.addEventListener('change', ()=> renderSwimlane()); const span=document.createElement('span'); span.textContent = name; label.appendChild(cb); label.appendChild(span); container.appendChild(label); }); }
+
+function getSelectedPeople(){ const checks = Array.from(document.querySelectorAll('#people-container input[type=checkbox]')); return checks.filter(c=>c.checked).map(c=>c.dataset.name); }
+
+function updateAssignedDatalist(){ const dl = document.getElementById('assigned-list'); dl.innerHTML=''; Array.from(assignedHistory).sort().forEach(name=>{ const opt=document.createElement('option'); opt.value=name; dl.appendChild(opt); }); }
+
+// --- Render By Event ---
+function renderByEvent(){ ['church','poruwa','reception'].forEach(event=>{ const ul = document.getElementById('list-'+event); ul.innerHTML=''; const arr = (appData.timeline[event]||[]).slice().sort((a,b)=>a.time.localeCompare(b.time)); arr.forEach(task=>{ const li=document.createElement('li'); li.className='timeline-item'; li.dataset.id = task.id; li.dataset.event = event; li.innerHTML = `<div class="left"><div class="time">${esc(task.time)}${task.duration?(' ('+task.duration+'m)'):''}</div><div class="meta"><div class="title">${esc(task.title)}</div><div class="assigned">${esc(task.assigned)}</div></div></div>`; li.addEventListener('dblclick', ()=> openEditModal(event, task.id)); ul.appendChild(li); }); }); }
+
+// --- Render Compact ---
+function renderCompact(){ const flat = Object.entries(appData.timeline).flatMap(([event,tasks])=>tasks.map(t=>({event, ...t}))); flat.sort((a,b)=>a.time.localeCompare(b.time)); const ul = document.getElementById('list-compact'); ul.innerHTML=''; flat.forEach(t=>{ const li=document.createElement('li'); li.className='timeline-item'; li.dataset.id=t.id; li.dataset.event=t.event; li.innerHTML=`<div class="left"><div class="time">${esc(t.time)}${t.duration?(' ('+t.duration+'m)'):''}</div><div class="meta"><div class="title">[${esc(t.event)}] ${esc(t.title)}</div><div class="assigned">${esc(t.assigned)}</div></div></div>`; li.addEventListener('dblclick', ()=> openEditModal(t.event, t.id)); ul.appendChild(li); }); }
+
+// --- Render Swimlane (only selected event and selected people) ---
+function renderSwimlane(){ const root = document.getElementById('swimlane-root'); root.innerHTML = ''; const selectedEvent = document.getElementById('swimlane-event-filter').value; const selectedPeople = getSelectedPeople(); if(selectedPeople.length===0){ root.innerHTML='<div style="padding:0.6rem;color:#666">No people selected</div>'; return; }
+  // times where at least one selected person has a task in the selectedEvent
+  const timesSet = new Set(); (appData.timeline[selectedEvent]||[]).forEach(t=>{ if(selectedPeople.includes(t.assigned)) timesSet.add(t.time); }); const times = Array.from(timesSet).sort((a,b)=>a.localeCompare(b)); if(times.length===0){ root.innerHTML='<div style="padding:0.6rem;color:#666">No tasks for selected people in this event</div>'; return; }
+  // header
+  const header = document.createElement('div'); header.className='swimlane-header'; const spacer = document.createElement('div'); spacer.style.width='120px'; header.appendChild(spacer);
+  selectedPeople.forEach(p=>{ const ph = document.createElement('div'); ph.className='person'; ph.textContent = p; ph.style.minWidth='140px'; ph.style.textAlign='center'; ph.style.fontWeight='600'; ph.style.padding='6px'; ph.style.borderRadius='6px'; ph.style.background='#f2f2f2'; header.appendChild(ph); }); root.appendChild(header);
+  // rows
+  times.forEach(time => {
+    const row = document.createElement('div'); row.className='swimlane-row'; const timeCell = document.createElement('div'); timeCell.className='timecell'; timeCell.textContent = time; row.appendChild(timeCell);
+    const cells = document.createElement('div'); cells.className='cells'; cells.style.display='flex'; selectedPeople.forEach(person => {
+      const cell = document.createElement('div'); cell.className='swimlane-col'; cell.dataset.person = person; cell.dataset.time = time; cell.dataset.event = selectedEvent; // container for tasks
+      // find tasks matching person & time in selectedEvent
+      const matches = (appData.timeline[selectedEvent]||[]).filter(t=>t.assigned===person && t.time===time);
+      const ul = document.createElement('ul'); ul.className='timeline-list'; // create li for each
+      matches.forEach(task=>{
+        const li = document.createElement('li'); li.className='timeline-item'; li.dataset.id = task.id; li.dataset.event = selectedEvent; li.innerHTML = `<div class="left"><div class="time">${esc(task.time)}${task.duration?(' ('+task.duration+'m)'):''}</div><div class="meta"><div class="title">${esc(task.title)}</div><div class="assigned">${esc(task.assigned)}</div></div></div>`; li.addEventListener('dblclick', ()=> openEditModal(selectedEvent, task.id)); ul.appendChild(li);
+      });
+      cell.appendChild(ul);
+      cells.appendChild(cell);
+    });
+    row.appendChild(cells); root.appendChild(row);
+  });
+  // attach Sortable to each cell's UL
+  Array.from(root.querySelectorAll('.swimlane-col')).forEach(col => {
+    const ul = col.querySelector('.timeline-list'); if(!ul) return; Sortable.create(ul, {
+      group: 'swimlane', animation:150,
+      onEnd: evt => {
+        const movedId = parseInt(evt.item.dataset.id);
+        const destCell = evt.to.closest('.swimlane-col');
+        if(!destCell) return;
+        const destPerson = destCell.dataset.person;
+        const destTime = destCell.dataset.time;
+        const destEvent = destCell.dataset.event;
+        // find and remove from source in appData for destEvent (we only display selectedEvent tasks)
+        const tasks = appData.timeline[destEvent] || [];
+        const idx = tasks.findIndex(t => t.id == movedId);
+        if(idx === -1) return;
+        const [task] = tasks.splice(idx,1);
+        // update task properties
+        task.assigned = destPerson; task.time = destTime;
+        // insert at new position in tasks array according to DOM order
+        const newIndex = Array.from(evt.to.children).indexOf(evt.item);
+        tasks.splice(newIndex, 0, task);
+        appData.timeline[destEvent] = tasks;
+        saveToLocal(); renderAll();
+      }
+    });
+  });
+}
+
+// --- Add task ---
+const form = document.getElementById('taskForm'); form.addEventListener('submit', e=>{ e.preventDefault(); addTaskFromForm(); });
+['task-time','task-duration-select','task-duration-custom','task-title','task-assigned','task-event'].forEach(id=>{ const el=document.getElementById(id); if(!el) return; el.addEventListener('keydown', ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); addTaskFromForm(); } }); });
+function addTaskFromForm(){ const time = document.getElementById('task-time').value; const durSel = document.getElementById('task-duration-select').value; const durCustom = document.getElementById('task-duration-custom').value; let duration = null; if(durSel==='custom') duration = durCustom?parseInt(durCustom):null; else if(durSel) duration = parseInt(durSel); const title = document.getElementById('task-title').value.trim(); const assigned = document.getElementById('task-assigned').value.trim(); const event = document.getElementById('task-event').value; if(!time || !title || !event){ alert('Please fill time, title and event'); return; } const id = Date.now() + Math.floor(Math.random()*999); const task = { id, time, duration, title, assigned }; appData.timeline[event] = appData.timeline[event] || []; appData.timeline[event].push(task); if(assigned) assignedHistory.add(assigned); updateAssignedDatalist(); renderPeopleFilter(); renderAll(); form.reset(); document.getElementById('task-duration-custom').style.display='none'; }
+
+document.getElementById('task-duration-select').addEventListener('change', e=>{ document.getElementById('task-duration-custom').style.display = (e.target.value==='custom') ? 'block' : 'none'; });
+
+// --- Modal ---
+const backdrop = document.getElementById('modal-backdrop'); const modalTime = document.getElementById('modal-time'); const modalDuration = document.getElementById('modal-duration'); const modalTitleInput = document.getElementById('modal-title-input'); const modalAssigned = document.getElementById('modal-assigned'); const modalEvent = document.getElementById('modal-event');
+function openEditModal(event, id){ currentEdit = { event, id }; const task = (appData.timeline[event]||[]).find(t=>t.id==id); if(!task) return; modalTime.value = task.time || ''; modalDuration.value = task.duration || ''; modalTitleInput.value = task.title || ''; modalAssigned.value = task.assigned || ''; modalEvent.value = event; backdrop.classList.add('show'); modalTitleInput.focus(); }
+function closeModal(){ backdrop.classList.remove('show'); currentEdit = null; }
+document.getElementById('modal-close').addEventListener('click', closeModal); backdrop.addEventListener('click', e=>{ if(e.target === backdrop) closeModal(); }); document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+
+document.getElementById('modal-save').addEventListener('click', ()=>{ if(!currentEdit) return; const { event, id } = currentEdit; const arr = appData.timeline[event] || []; const idx = arr.findIndex(t=>t.id==id); if(idx === -1) return; const updated = { id: id, time: modalTime.value, duration: modalDuration.value?parseInt(modalDuration.value):null, title: modalTitleInput.value.trim(), assigned: modalAssigned.value.trim() }; const newEvent = modalEvent.value; // remove old and push updated to new
+  appData.timeline[event].splice(idx,1); appData.timeline[newEvent] = appData.timeline[newEvent] || []; appData.timeline[newEvent].push(updated); if(updated.assigned) assignedHistory.add(updated.assigned); updateAssignedDatalist(); renderPeopleFilter(); renderAll(); closeModal(); });
+
+document.getElementById('modal-duplicate').addEventListener('click', ()=>{ if(!currentEdit) return; const { event, id } = currentEdit; const task = (appData.timeline[event]||[]).find(t=>t.id==id); if(!task) return; const dup = { id: Date.now() + Math.floor(Math.random()*999), time: modalTime.value || task.time, duration: modalDuration.value?parseInt(modalDuration.value):task.duration, title: modalTitleInput.value.trim()||task.title, assigned: modalAssigned.value.trim()||task.assigned }; const newEvent = modalEvent.value || event; appData.timeline[newEvent] = appData.timeline[newEvent] || []; appData.timeline[newEvent].push(dup); if(dup.assigned) assignedHistory.add(dup.assigned); updateAssignedDatalist(); renderPeopleFilter(); renderAll(); });
+
+document.getElementById('modal-delete').addEventListener('click', ()=>{ if(!currentEdit) return; if(!confirm('Delete this task?')) return; const { event, id } = currentEdit; appData.timeline[event] = (appData.timeline[event]||[]).filter(t=>t.id != id); renderAll(); closeModal(); });
+
+// --- Drag & Drop for event columns ---
+function initEventDrag(){ ['church','poruwa','reception'].forEach(eventKey=>{ const el = document.getElementById('list-'+eventKey); Sortable.create(el, { group:'event', animation:160, onEnd: evt=>{ const id = parseInt(evt.item.dataset.id); const from = evt.from.id.replace('list-',''); const to = evt.to.id.replace('list-',''); if(from && to && from !== to && appData.timeline[from] && appData.timeline[to]){ const idx = appData.timeline[from].findIndex(t=>t.id==id); if(idx===-1) return; const [task] = appData.timeline[from].splice(idx,1); const newIndex = Array.from(evt.to.children).indexOf(evt.item); appData.timeline[to].splice(newIndex,0,task); saveToLocal(); renderAll(); } } }); }); }
+
+// --- Export / Import ---
+function exportProject(){ const blob = new Blob([JSON.stringify(appData,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download = `kandl_project_${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(a.href); }
+function importProjectFile(file){ const reader = new FileReader(); reader.onload = e=>{ try{ const parsed = JSON.parse(e.target.result); if(parsed && parsed.timeline){ appData = parsed; // rebuild assignedHistory
+      assignedHistory.clear(); Object.values(appData.timeline).flat().forEach(t=>{ if(t.assigned) assignedHistory.add(t.assigned); }); updateAssignedDatalist(); renderPeopleFilter(); renderAll(); alert('Project imported'); } else alert('Invalid project file'); } catch(err){ alert('Error reading file'); } }; reader.readAsText(file); }
+
+document.getElementById('btn-export-json').addEventListener('click', exportProject); document.getElementById('btn-import-json').addEventListener('click', ()=> document.getElementById('import-file').click()); document.getElementById('import-file').addEventListener('change', e=>{ const f = e.target.files[0]; if(f) importProjectFile(f); e.target.value=''; });
+
+document.getElementById('btn-export-csv').addEventListener('click', ()=>{ const flat = Object.entries(appData.timeline).flatMap(([event,tasks])=>tasks.map(t=>({event,time:t.time,duration:t.duration,title:t.title,assigned:t.assigned}))); if(!flat.length){ alert('Nothing to export'); return; } const headers = ['event','time','duration','title','assigned']; const rows = [headers.join(','), ...flat.map(r=>headers.map(h=>`"${(r[h]||'').toString().replaceAll('"','""') }"`).join(','))]; const blob = new Blob([rows.join('\n')],{type:'text/csv'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `timeline_${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(a.href); });
+
+document.getElementById('btn-export-pdf').addEventListener('click', ()=>{ const { jsPDF } = window.jspdf; const doc = new jsPDF(); doc.setFontSize(14); doc.text('K&L Wedding — Timeline',14,20); const flat = Object.entries(appData.timeline).flatMap(([event,tasks])=>tasks.map(t=>[event, t.time + (t.duration?` (${t.duration}m)`:''), t.title, t.assigned])); doc.autoTable({ head:[['Event','Time','Task','Assigned']], body: flat, startY:30, styles:{fontSize:9,cellPadding:2}, headStyles:{fillColor:[82,121,111]} }); doc.save(`timeline_${new Date().toISOString().slice(0,10)}.pdf`); });
+
+// --- Tabs / View switching ---
+Array.from(document.querySelectorAll('nav.sidebar .tab')).forEach(btn=>{ btn.addEventListener('click', ()=>{ document.querySelectorAll('nav.sidebar .tab').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); setView(btn.dataset.view); }); });
+function setView(view){ document.getElementById('view-by-event').classList.toggle('hidden', view!=='by-event'); document.getElementById('view-compact').classList.toggle('hidden', view!=='compact'); document.getElementById('view-swimlane').classList.toggle('hidden', view!=='swimlane'); }
+
+// --- Render All ---
+function renderAll(){ renderPeopleFilter(); updateAssignedDatalist(); renderByEvent(); renderCompact(); // swimlane will render on demand
+  const currentView = document.querySelector('nav.sidebar .tab.active').dataset.view; if(currentView === 'swimlane') renderSwimlane(); initEventDrag(); saveToLocal(); }
+
+// --- Initialization ---
+loadFromLocal(); // no demo tasks
+// rebuild assignedHistory from loaded data
+Object.values(appData.timeline).flat().forEach(t=>{ if(t.assigned) assignedHistory.add(t.assigned); }); updateAssignedDatalist(); renderPeopleFilter(); renderAll();
+
+// swimlane event filter
+const swimFilter = document.getElementById('swimlane-event-filter'); swimFilter.addEventListener('change', ()=>{ const active = document.querySelector('nav.sidebar .tab.active').dataset.view; if(active==='swimlane') renderSwimlane(); });
+
+function renderSwimlaneWrapper(){ const active = document.querySelector('nav.sidebar .tab.active').dataset.view; if(active==='swimlane') renderSwimlane(); }
+
+// end
+</script>
+</body>
+</html>
